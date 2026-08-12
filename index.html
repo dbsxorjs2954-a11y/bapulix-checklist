@@ -1516,19 +1516,34 @@ function syncFieldPath(e){
 document.addEventListener('input', syncFieldPath);
 document.addEventListener('change', syncFieldPath);
 
+let composingSearch = false;
+function applySearchInput(el){
+  state.search = el.value;
+  const caret = el.selectionStart;
+  render();
+  const ref = document.querySelector('[data-action="search"]');
+  if(ref){ ref.focus(); ref.setSelectionRange(caret,caret); }
+}
+function applyDashSearchInput(el){
+  state.dashSearch = el.value;
+  const caret = el.selectionStart;
+  render();
+  const ref = document.querySelector('[data-action="dash-search"]');
+  if(ref){ ref.focus(); ref.setSelectionRange(caret,caret); }
+}
+document.addEventListener('compositionstart', (e)=>{
+  if(e.target.dataset.action==='search' || e.target.dataset.action==='dash-search') composingSearch = true;
+});
+document.addEventListener('compositionend', (e)=>{
+  if(e.target.dataset.action==='search'){ composingSearch=false; applySearchInput(e.target); }
+  else if(e.target.dataset.action==='dash-search'){ composingSearch=false; applyDashSearchInput(e.target); }
+});
 document.addEventListener('input', (e)=>{
+  if(composingSearch) return;
   if(e.target.dataset.action==='search'){
-    state.search = e.target.value;
-    const caret = e.target.selectionStart;
-    render();
-    const el = document.querySelector('[data-action="search"]');
-    if(el){ el.focus(); el.setSelectionRange(caret,caret); }
+    applySearchInput(e.target);
   } else if(e.target.dataset.action==='dash-search'){
-    state.dashSearch = e.target.value;
-    const caret = e.target.selectionStart;
-    render();
-    const el = document.querySelector('[data-action="dash-search"]');
-    if(el){ el.focus(); el.setSelectionRange(caret,caret); }
+    applyDashSearchInput(e.target);
   }
 });
 
