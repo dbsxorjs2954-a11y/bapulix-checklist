@@ -212,6 +212,12 @@ textarea{
   font-size:14px;font-family:inherit;resize:vertical;min-height:70px;background:var(--surface-2);color:var(--text);
 }
 .fbtextarea{min-height:90px;}
+.kk-hint{font-size:12px;color:var(--text-dim);padding:10px 12px 0;line-height:1.5;}
+.kk-quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+.kk-quick button{border:1px solid var(--border);background:var(--surface);color:var(--text-dim);border-radius:14px;padding:5px 10px;font-size:12px;}
+.kk-copy{display:block;width:calc(100% - 24px);margin:4px 12px 12px;padding:13px;border:none;border-radius:10px;background:#fee500;color:#191919;font-size:15px;font-weight:700;}
+.kk-copy:active{filter:brightness(.93);}
+.card .kkline{font-size:12px;color:var(--text-dim);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
 .sigwrap{padding:12px 14px;}
 .sigwrap>label{font-size:11px;color:var(--text-dim);font-weight:600;display:block;margin-bottom:6px;}
@@ -497,8 +503,35 @@ function blankVisit(){
     photos:{}, // key -> data URL (전용품목, 가게확인, 설비사진)
     photoTimes:{}, // key -> 'HH:MM' 촬영 시각 (출입/퇴실시간용)
     notes:{ ex:'', wt:'', bs:'', ckEtc:'' },
-    feedback:{ sales:'', operation:'', newMenu:'', etc:'' }
+    feedback:{ sales:'', operation:'', newMenu:'', etc:'' },
+    kakao: blankKakao()
   };
+}
+
+/* ---------------- 카톡 방문 보고 양식 ---------------- */
+const KAKAO_FIELDS = [
+  { key:'hygiene', label:'위생', placeholder:'예) 지난 방문 때보다 많이 개선되었습니다.', quick:['양호합니다.','지난 방문 때보다 많이 개선되었습니다.'] },
+  { key:'purchase', label:'사입', placeholder:'예) 확인되지 않습니다.', quick:['확인되지 않습니다.'] },
+  { key:'newMenu', label:'신메뉴', placeholder:'예) 전 품목 판매 중입니다.', quick:['전 품목 판매 중입니다.'] },
+  { key:'visorOpinion', label:'바이저 의견', placeholder:'매출·영업·세팅 등 바이저 의견', quick:[], tall:true },
+  { key:'ownerOpinion', label:'점주 의견', placeholder:'예) 별도 의견 없습니다.', quick:['별도 의견 없습니다.'] }
+];
+function blankKakao(){ const o={}; KAKAO_FIELDS.forEach(f=>o[f.key]=''); return o; }
+function ensureKakao(v){ v.kakao = Object.assign(blankKakao(), v.kakao||{}); return v; }
+function kakaoTitle(store){
+  const s = (store||'').trim();
+  if(!s) return '밥풀릭스 (지점명 미입력)';
+  return s.indexOf('밥풀릭스')===0 ? s : '밥풀릭스 '+s;
+}
+function buildKakaoText(v){
+  const k = Object.assign(blankKakao(), v.kakao||{});
+  const blocks = [kakaoTitle(v.info.store)];
+  KAKAO_FIELDS.forEach(f=>{ blocks.push(f.label+'\n'+((k[f.key]||'').trim()||'-')); });
+  return blocks.join('\n\n');
+}
+function kakaoFilledCount(v){
+  const k = v.kakao||{};
+  return KAKAO_FIELDS.filter(f=>(k[f.key]||'').trim()).length;
 }
 
 /* ---------------- Rendering helpers ---------------- */
@@ -603,7 +636,7 @@ function renderList(){
       <div class="info" data-action="open" data-id="${v.id}">
         <b>${escapeHtml(v.info.store)||'(지점명 미입력)'}</b>
         <div class="meta">${escapeHtml(v.info.date||'')} · 점주 ${escapeHtml(v.info.owner)||'-'} · 바이저 ${escapeHtml(v.info.visor)||'-'}</div>
-        <div class="score">체크 완료 ${st.done}/${st.total} · O/△/X ${st.o}/${st.t}/${st.x}</div>
+        <div class="score">체크 완료 ${st.done}/${st.total} · O/△/X ${st.o}/${st.t}/${st.x} · 카톡 보고 ${kakaoFilledCount(v)}/${KAKAO_FIELDS.length}</div>
       </div>
       <div class="actions">
         <button class="iconbtn" data-action="open" data-id="${v.id}">✎</button>
@@ -676,7 +709,7 @@ function computeStoreStats(storeName){
     .filter(k=>last.photos[k])
     .map(k=>({ key:k, label: photoLabelForKey(k) }));
 
-  const feedback = last.feedback.sales || last.feedback.operation || last.feedback.newMenu || last.feedback.etc || '';
+  const feedback = (last.kakao && last.kakao.visorOpinion) || last.feedback.sales || last.feedback.operation || last.feedback.newMenu || last.feedback.etc || '';
 
   const history = list.map(v=>{
     const s = summarize(v);
@@ -791,6 +824,17 @@ function renderForm(){
   </div>
 
   <div class="section">
+    <div class="section-head">카톡 방문 보고</div>
+    <div class="kk-hint">아래 칸을 채우고 [카톡용 텍스트 복사]를 누르면 단톡방에 바로 붙여넣을 수 있는 형식으로 복사되고, 이 방문 기록에도 저장됩니다.</div>
+    ${KAKAO_FIELDS.map(f=>`<div class="notewrap" style="border-top:none;">
+      <label>${escapeHtml(f.label)}</label>
+      <textarea class="${f.tall?'fbtextarea':''}" data-path="kakao.${f.key}" placeholder="${escapeHtml(f.placeholder)}">${escapeHtml(current.kakao[f.key])}</textarea>
+      ${f.quick.length?`<div class="kk-quick">${f.quick.map(q=>`<button type="button" data-action="kk-quick" data-key="${f.key}" data-text="${escapeHtml(q)}">${escapeHtml(q)}</button>`).join('')}</div>`:''}
+    </div>`).join('')}
+    <button type="button" class="kk-copy" data-action="copy-kakao">💬 카톡용 텍스트 복사</button>
+  </div>
+
+  <div class="section">
     <div class="section-head">가게확인</div>
     ${storeCheckRows()}
   </div>
@@ -860,7 +904,7 @@ function renderForm(){
   <div class="bottombar">
     <button class="back" data-action="nav-list">목록으로</button>
     <button class="back" data-action="save-pdf">PDF 보기</button>
-    <button class="back" data-action="copy-text">텍스트 복사</button>
+    <button class="back" data-action="copy-kakao">카톡 복사</button>
     <button class="save" data-action="save">저장</button>
   </div>
   `;
@@ -888,10 +932,12 @@ function renderModal(){
   if(state.modal.type==='text'){
     wrap.innerHTML = `<div class="modal-backdrop" data-action="modal-close">
       <div class="modal">
-        <h3>텍스트 요약</h3>
+        <h3>${escapeHtml(state.modal.title||'텍스트 요약')}</h3>
+        ${state.modal.notice?`<p class="hint" style="color:var(--ok);font-weight:700;">${escapeHtml(state.modal.notice)}</p>`:''}
         <p class="hint">아래 상자를 탭하면 전체 선택됩니다. 그 상태에서 길게 눌러 "복사"를 선택해 카톡 등에 붙여넣으세요.</p>
-        <textarea class="copybox" readonly data-action="select-all" onclick="this.select()">${escapeHtml(state.modal.content)}</textarea>
-        <button class="full" data-action="modal-copy">자동 복사 시도</button>
+        <textarea class="copybox" readonly data-action="select-all" onclick="this.select()" style="min-height:260px;">${escapeHtml(state.modal.content)}</textarea>
+        <button class="full" data-action="modal-copy"${state.modal.kakao?' style="background:#fee500;color:#191919;font-weight:700;"':''}>${state.modal.kakao?'다시 복사':'자동 복사 시도'}</button>
+        ${state.modal.kakao?`<button class="full" data-action="copy-text">전체 체크리스트 텍스트 보기</button>`:''}
         <button class="full" data-action="modal-close">닫기</button>
       </div>
     </div>`;
@@ -1191,6 +1237,8 @@ function buildSheetRow(v){
   addCheck('조리', COOKING, 'ck', v.notes.ckEtc);
   addCheck('운영', OPERATION, 'op');
 
+  const kk = Object.assign(blankKakao(), v.kakao||{});
+  KAKAO_FIELDS.forEach(f=>{ row['카톡보고 - '+f.label] = kk[f.key]||''; });
   row['매출 피드백'] = v.feedback.sales||'';
   row['운영 피드백'] = v.feedback.operation||'';
   row['신메뉴 도입'] = v.feedback.newMenu||'';
@@ -1272,7 +1320,9 @@ function buildPrintHTML(v){
     <table class="chk-tb"><tbody>${checkGroupRows(v,'운영',OPERATION,'op')}</tbody></table>
   </div>`;
 
+  const kkv = Object.assign(blankKakao(), v.kakao||{});
   const page2 = `<div class="print-sheet" id="pdfPage2">
+    ${KAKAO_FIELDS.some(f=>(kkv[f.key]||'').trim()) ? `<div class="fb-block"><div class="fb-title">카톡 방문 보고</div><div class="fb-body" style="min-height:0;">${escapeHtml(buildKakaoText(v))}</div></div><div style="height:14px;"></div>` : ''}
     <div class="fb-block"><div class="fb-title">매출 관련 피드백 (플랫폼 광고, 한그릇, 하나만, 지역 플랫폼)</div><div class="fb-body">${escapeHtml(v.feedback.sales)||'-'}</div></div>
     <div class="fb-block"><div class="fb-title">운영관련 피드백 (인건비, 식자재, 운영시간)</div><div class="fb-body">${escapeHtml(v.feedback.operation)||'-'}</div></div>
     <div class="fb-block"><div class="fb-title">신메뉴 도입 여부</div><div class="fb-body">${escapeHtml(v.feedback.newMenu)||'-'}</div></div>
@@ -1365,6 +1415,16 @@ function buildSummary(v){
   return lines.join('\n');
 }
 
+function persistCurrent(){
+  if(!current) return;
+  current.updatedAt = Date.now();
+  const idx = visits.findIndex(x=>x.id===current.id);
+  const copy = JSON.parse(JSON.stringify(current));
+  if(idx>=0) visits[idx]=copy; else visits.push(copy);
+  saveVisits(visits);
+  syncPush(copy);
+}
+
 /* ---------------- Event handling ---------------- */
 document.addEventListener('click', (e)=>{
   const t = e.target.closest('[data-action]');
@@ -1378,7 +1438,7 @@ document.addEventListener('click', (e)=>{
     render();
   } else if(action==='open'){
     const v = visits.find(x=>x.id===t.dataset.id);
-    if(v){ current = JSON.parse(JSON.stringify(v)); current.photos = current.photos || {}; current.photoTimes = current.photoTimes || {}; state.view='form'; state.currentId=v.id; render(); }
+    if(v){ current = JSON.parse(JSON.stringify(v)); current.photos = current.photos || {}; current.photoTimes = current.photoTimes || {}; ensureKakao(current); state.view='form'; state.currentId=v.id; render(); }
   } else if(action==='delete'){
     e.stopPropagation();
     const delId = t.dataset.id;
@@ -1405,11 +1465,7 @@ document.addEventListener('click', (e)=>{
     const v = visits.find(x=>x.id===t.dataset.visit);
     if(v) openReportModal(v);
   } else if(action==='save'){
-    current.updatedAt = Date.now();
-    const idx = visits.findIndex(x=>x.id===current.id);
-    if(idx>=0) visits[idx]=current; else visits.push(current);
-    saveVisits(visits);
-    syncPush(current);
+    persistCurrent();
     state.view='list';
     render();
   } else if(action==='toggle'){
@@ -1430,8 +1486,24 @@ document.addEventListener('click', (e)=>{
   } else if(action==='save-pdf'){
     openReportModal();
   } else if(action==='copy-text'){
-    state.modal = { type:'text', content: buildSummary(current) };
+    state.modal = { type:'text', title:'전체 체크리스트 텍스트', content: buildSummary(current) };
     renderModal();
+  } else if(action==='kk-quick'){
+    const key = t.dataset.key, text = t.dataset.text;
+    current.kakao[key] = text;
+    const ta = document.querySelector(`textarea[data-path="kakao.${key}"]`);
+    if(ta) ta.value = text;
+  } else if(action==='copy-kakao'){
+    persistCurrent();
+    const content = buildKakaoText(current);
+    const open = (notice)=>{ state.modal = { type:'text', title:'카톡 방문 보고', content, kakao:true, notice }; renderModal(); };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(content)
+        .then(()=>open('복사 완료! 방문 기록에도 저장했습니다. 카톡방에 붙여넣으세요.'))
+        .catch(()=>open('방문 기록에 저장했습니다. 아래 텍스트를 길게 눌러 복사해 주세요.'));
+    } else {
+      open('방문 기록에 저장했습니다. 아래 텍스트를 길게 눌러 복사해 주세요.');
+    }
   } else if(action==='modal-close'){
     state.modal=null;
     const m=document.getElementById('modalRoot'); if(m) m.remove();
